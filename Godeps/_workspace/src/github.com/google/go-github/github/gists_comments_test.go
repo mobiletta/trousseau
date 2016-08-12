@@ -19,23 +19,24 @@ func TestGistsService_ListComments(t *testing.T) {
 
 	mux.HandleFunc("/gists/1/comments", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"id": 1}]`)
 	})
 
-	comments, _, err := client.Gists.ListComments("1")
-
+	opt := &ListOptions{Page: 2}
+	comments, _, err := client.Gists.ListComments("1", opt)
 	if err != nil {
 		t.Errorf("Gists.Comments returned error: %v", err)
 	}
 
-	want := []GistComment{{ID: Int(1)}}
+	want := []*GistComment{{ID: Int(1)}}
 	if !reflect.DeepEqual(comments, want) {
 		t.Errorf("Gists.ListComments returned %+v, want %+v", comments, want)
 	}
 }
 
 func TestGistsService_ListComments_invalidID(t *testing.T) {
-	_, _, err := client.Gists.ListComments("%")
+	_, _, err := client.Gists.ListComments("%", nil)
 	testURLParseError(t, err)
 }
 
@@ -49,7 +50,6 @@ func TestGistsService_GetComment(t *testing.T) {
 	})
 
 	comment, _, err := client.Gists.GetComment("1", 2)
-
 	if err != nil {
 		t.Errorf("Gists.GetComment returned error: %v", err)
 	}

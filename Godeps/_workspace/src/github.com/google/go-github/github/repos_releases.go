@@ -8,26 +8,33 @@ package github
 import (
 	"errors"
 	"fmt"
+	"io"
 	"mime"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // RepositoryRelease represents a GitHub release in a repository.
 type RepositoryRelease struct {
-	ID              *int       `json:"id,omitempty"`
-	TagName         *string    `json:"tag_name,omitempty"`
-	TargetCommitish *string    `json:"target_commitish,omitempty"`
-	Name            *string    `json:"name,omitempty"`
-	Body            *string    `json:"body,omitempty"`
-	Draft           *bool      `json:"draft,omitempty"`
-	Prerelease      *bool      `json:"prerelease,omitempty"`
-	CreatedAt       *Timestamp `json:"created_at,omitempty"`
-	PublishedAt     *Timestamp `json:"published_at,omitempty"`
-	URL             *string    `json:"url,omitempty"`
-	HTMLURL         *string    `json:"html_url,omitempty"`
-	AssetsURL       *string    `json:"assets_url,omitempty"`
-	UploadURL       *string    `json:"upload_url,omitempty"`
+	ID              *int           `json:"id,omitempty"`
+	TagName         *string        `json:"tag_name,omitempty"`
+	TargetCommitish *string        `json:"target_commitish,omitempty"`
+	Name            *string        `json:"name,omitempty"`
+	Body            *string        `json:"body,omitempty"`
+	Draft           *bool          `json:"draft,omitempty"`
+	Prerelease      *bool          `json:"prerelease,omitempty"`
+	CreatedAt       *Timestamp     `json:"created_at,omitempty"`
+	PublishedAt     *Timestamp     `json:"published_at,omitempty"`
+	URL             *string        `json:"url,omitempty"`
+	HTMLURL         *string        `json:"html_url,omitempty"`
+	AssetsURL       *string        `json:"assets_url,omitempty"`
+	Assets          []ReleaseAsset `json:"assets,omitempty"`
+	UploadURL       *string        `json:"upload_url,omitempty"`
+	ZipballURL      *string        `json:"zipball_url,omitempty"`
+	TarballURL      *string        `json:"tarball_url,omitempty"`
+	Author          *CommitAuthor  `json:"author,omitempty"`
 }
 
 func (r RepositoryRelease) String() string {
@@ -36,16 +43,18 @@ func (r RepositoryRelease) String() string {
 
 // ReleaseAsset represents a Github release asset in a repository.
 type ReleaseAsset struct {
-	ID            *int       `json:"id,omitempty"`
-	URL           *string    `json:"url,omitempty"`
-	Name          *string    `json:"name,omitempty"`
-	Label         *string    `json:"label,omitempty"`
-	State         *string    `json:"state,omitempty"`
-	ContentType   *string    `json:"content_type,omitempty"`
-	Size          *int       `json:"size,omitempty"`
-	DownloadCount *int       `json:"download_count,omitempty"`
-	CreatedAt     *Timestamp `json:"created_at,omitempty"`
-	UpdatedAt     *Timestamp `json:"updated_at,omitempty"`
+	ID                 *int       `json:"id,omitempty"`
+	URL                *string    `json:"url,omitempty"`
+	Name               *string    `json:"name,omitempty"`
+	Label              *string    `json:"label,omitempty"`
+	State              *string    `json:"state,omitempty"`
+	ContentType        *string    `json:"content_type,omitempty"`
+	Size               *int       `json:"size,omitempty"`
+	DownloadCount      *int       `json:"download_count,omitempty"`
+	CreatedAt          *Timestamp `json:"created_at,omitempty"`
+	UpdatedAt          *Timestamp `json:"updated_at,omitempty"`
+	BrowserDownloadURL *string    `json:"browser_download_url,omitempty"`
+	Uploader           *User      `json:"uploader,omitempty"`
 }
 
 func (r ReleaseAsset) String() string {
@@ -55,15 +64,19 @@ func (r ReleaseAsset) String() string {
 // ListReleases lists the releases for a repository.
 //
 // GitHub API docs: http://developer.github.com/v3/repos/releases/#list-releases-for-a-repository
-func (s *RepositoriesService) ListReleases(owner, repo string) ([]RepositoryRelease, *Response, error) {
+func (s *RepositoriesService) ListReleases(owner, repo string, opt *ListOptions) ([]*RepositoryRelease, *Response, error) {
 	u := fmt.Sprintf("repos/%s/%s/releases", owner, repo)
+	u, err := addOptions(u, opt)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	req, err := s.client.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	releases := new([]RepositoryRelease)
+	releases := new([]*RepositoryRelease)
 	resp, err := s.client.Do(req, releases)
 	if err != nil {
 		return nil, resp, err
@@ -76,8 +89,27 @@ func (s *RepositoriesService) ListReleases(owner, repo string) ([]RepositoryRele
 // GitHub API docs: http://developer.github.com/v3/repos/releases/#get-a-single-release
 func (s *RepositoriesService) GetRelease(owner, repo string, id int) (*RepositoryRelease, *Response, error) {
 	u := fmt.Sprintf("repos/%s/%s/releases/%d", owner, repo, id)
+	return s.getSingleRelease(u)
+}
 
-	req, err := s.client.NewRequest("GET", u, nil)
+// GetLatestRelease fetches the latest published release for the repository.
+//
+// GitHub API docs: https://developer.github.com/v3/repos/releases/#get-the-latest-release
+func (s *RepositoriesService) GetLatestRelease(owner, repo string) (*RepositoryRelease, *Response, error) {
+	u := fmt.Sprintf("repos/%s/%s/releases/latest", owner, repo)
+	return s.getSingleRelease(u)
+}
+
+// GetReleaseByTag fetches a release with the specified tag.
+//
+// GitHub API docs: https://developer.github.com/v3/repos/releases/#get-a-release-by-tag-name
+func (s *RepositoriesService) GetReleaseByTag(owner, repo, tag string) (*RepositoryRelease, *Response, error) {
+	u := fmt.Sprintf("repos/%s/%s/releases/tags/%s", owner, repo, tag)
+	return s.getSingleRelease(u)
+}
+
+func (s *RepositoriesService) getSingleRelease(url string) (*RepositoryRelease, *Response, error) {
+	req, err := s.client.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -144,15 +176,19 @@ func (s *RepositoriesService) DeleteRelease(owner, repo string, id int) (*Respon
 // ListReleaseAssets lists the release's assets.
 //
 // GitHub API docs : http://developer.github.com/v3/repos/releases/#list-assets-for-a-release
-func (s *RepositoriesService) ListReleaseAssets(owner, repo string, id int) ([]ReleaseAsset, *Response, error) {
+func (s *RepositoriesService) ListReleaseAssets(owner, repo string, id int, opt *ListOptions) ([]*ReleaseAsset, *Response, error) {
 	u := fmt.Sprintf("repos/%s/%s/releases/%d/assets", owner, repo, id)
+	u, err := addOptions(u, opt)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	req, err := s.client.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	assets := new([]ReleaseAsset)
+	assets := new([]*ReleaseAsset)
 	resp, err := s.client.Do(req, assets)
 	if err != nil {
 		return nil, resp, nil
@@ -177,6 +213,50 @@ func (s *RepositoriesService) GetReleaseAsset(owner, repo string, id int) (*Rele
 		return nil, resp, nil
 	}
 	return asset, resp, err
+}
+
+// DownloadReleaseAsset downloads a release asset or returns a redirect URL.
+//
+// DownloadReleaseAsset returns an io.ReadCloser that reads the contents of the
+// specified release asset. It is the caller's responsibility to close the ReadCloser.
+// If a redirect is returned, the redirect URL will be returned as a string instead
+// of the io.ReadCloser. Exactly one of rc and redirectURL will be zero.
+//
+// GitHub API docs : http://developer.github.com/v3/repos/releases/#get-a-single-release-asset
+func (s *RepositoriesService) DownloadReleaseAsset(owner, repo string, id int) (rc io.ReadCloser, redirectURL string, err error) {
+	u := fmt.Sprintf("repos/%s/%s/releases/assets/%d", owner, repo, id)
+
+	req, err := s.client.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	req.Header.Set("Accept", defaultMediaType)
+
+	s.client.clientMu.Lock()
+	defer s.client.clientMu.Unlock()
+
+	var loc string
+	saveRedirect := s.client.client.CheckRedirect
+	s.client.client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		loc = req.URL.String()
+		return errors.New("disable redirect")
+	}
+	defer func() { s.client.client.CheckRedirect = saveRedirect }()
+
+	resp, err := s.client.client.Do(req)
+	if err != nil {
+		if !strings.Contains(err.Error(), "disable redirect") {
+			return nil, "", err
+		}
+		return nil, loc, nil
+	}
+
+	if err := CheckResponse(resp); err != nil {
+		resp.Body.Close()
+		return nil, "", err
+	}
+
+	return resp.Body, "", nil
 }
 
 // EditReleaseAsset edits a repository release asset.
@@ -227,7 +307,7 @@ func (s *RepositoriesService) UploadReleaseAsset(owner, repo string, id int, opt
 		return nil, nil, err
 	}
 	if stat.IsDir() {
-		return nil, nil, errors.New("The asset to upload can't be a directory")
+		return nil, nil, errors.New("the asset to upload can't be a directory")
 	}
 
 	mediaType := mime.TypeByExtension(filepath.Ext(file.Name()))

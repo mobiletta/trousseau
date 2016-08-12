@@ -11,11 +11,9 @@ import "fmt"
 // GitHub API.
 //
 // GitHub API docs: http://developer.github.com/v3/gitignore/
-type GitignoresService struct {
-	client *Client
-}
+type GitignoresService service
 
-// Represents a .gitignore file as returned by the GitHub API.
+// Gitignore represents a .gitignore file as returned by the GitHub API.
 type Gitignore struct {
 	Name   *string `json:"name,omitempty"`
 	Source *string `json:"source,omitempty"`
@@ -25,7 +23,7 @@ func (g Gitignore) String() string {
 	return Stringify(g)
 }
 
-// Fetches a list of all available Gitignore templates.
+// List all available Gitignore templates.
 //
 // http://developer.github.com/v3/gitignore/#listing-available-templates
 func (s GitignoresService) List() ([]string, *Response, error) {
@@ -43,7 +41,7 @@ func (s GitignoresService) List() ([]string, *Response, error) {
 	return *availableTemplates, resp, err
 }
 
-// Fetches a Gitignore by name.
+// Get a Gitignore by name.
 //
 // http://developer.github.com/v3/gitignore/#get-a-single-template
 func (s GitignoresService) Get(name string) (*Gitignore, *Response, error) {

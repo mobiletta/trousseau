@@ -20,23 +20,28 @@ func TestIssuesService_ListComments_allIssues(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/issues/comments", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		testFormValues(t, r, values{
 			"sort":      "updated",
 			"direction": "desc",
 			"since":     "2002-02-10T15:30:00Z",
+			"page":      "2",
 		})
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
-	opt := &IssueListCommentsOptions{"updated", "desc",
-		time.Date(2002, time.February, 10, 15, 30, 0, 0, time.UTC),
+	opt := &IssueListCommentsOptions{
+		Sort:        "updated",
+		Direction:   "desc",
+		Since:       time.Date(2002, time.February, 10, 15, 30, 0, 0, time.UTC),
+		ListOptions: ListOptions{Page: 2},
 	}
 	comments, _, err := client.Issues.ListComments("o", "r", 0, opt)
 	if err != nil {
 		t.Errorf("Issues.ListComments returned error: %v", err)
 	}
 
-	want := []IssueComment{{ID: Int(1)}}
+	want := []*IssueComment{{ID: Int(1)}}
 	if !reflect.DeepEqual(comments, want) {
 		t.Errorf("Issues.ListComments returned %+v, want %+v", comments, want)
 	}
@@ -48,6 +53,7 @@ func TestIssuesService_ListComments_specificIssue(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/issues/1/comments", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
@@ -56,7 +62,7 @@ func TestIssuesService_ListComments_specificIssue(t *testing.T) {
 		t.Errorf("Issues.ListComments returned error: %v", err)
 	}
 
-	want := []IssueComment{{ID: Int(1)}}
+	want := []*IssueComment{{ID: Int(1)}}
 	if !reflect.DeepEqual(comments, want) {
 		t.Errorf("Issues.ListComments returned %+v, want %+v", comments, want)
 	}
@@ -73,6 +79,7 @@ func TestIssuesService_GetComment(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/issues/comments/1", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		fmt.Fprint(w, `{"id":1}`)
 	})
 

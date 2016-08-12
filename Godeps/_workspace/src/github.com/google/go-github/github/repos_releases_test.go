@@ -6,11 +6,14 @@
 package github
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -20,14 +23,16 @@ func TestRepositoriesService_ListReleases(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
-	releases, _, err := client.Repositories.ListReleases("o", "r")
+	opt := &ListOptions{Page: 2}
+	releases, _, err := client.Repositories.ListReleases("o", "r", opt)
 	if err != nil {
 		t.Errorf("Repositories.ListReleases returned error: %v", err)
 	}
-	want := []RepositoryRelease{{ID: Int(1)}}
+	want := []*RepositoryRelease{{ID: Int(1)}}
 	if !reflect.DeepEqual(releases, want) {
 		t.Errorf("Repositories.ListReleases returned %+v, want %+v", releases, want)
 	}
@@ -50,6 +55,46 @@ func TestRepositoriesService_GetRelease(t *testing.T) {
 	want := &RepositoryRelease{ID: Int(1)}
 	if !reflect.DeepEqual(release, want) {
 		t.Errorf("Repositories.GetRelease returned %+v, want %+v", release, want)
+	}
+}
+
+func TestRepositoriesService_GetLatestRelease(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "GET")
+		fmt.Fprint(w, `{"id":3}`)
+	})
+
+	release, resp, err := client.Repositories.GetLatestRelease("o", "r")
+	if err != nil {
+		t.Errorf("Repositories.GetLatestRelease returned error: %v\n%v", err, resp.Body)
+	}
+
+	want := &RepositoryRelease{ID: Int(3)}
+	if !reflect.DeepEqual(release, want) {
+		t.Errorf("Repositories.GetLatestRelease returned %+v, want %+v", release, want)
+	}
+}
+
+func TestRepositoriesService_GetReleaseByTag(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/releases/tags/foo", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "GET")
+		fmt.Fprint(w, `{"id":13}`)
+	})
+
+	release, resp, err := client.Repositories.GetReleaseByTag("o", "r", "foo")
+	if err != nil {
+		t.Errorf("Repositories.GetReleaseByTag returned error: %v\n%v", err, resp.Body)
+	}
+
+	want := &RepositoryRelease{ID: Int(13)}
+	if !reflect.DeepEqual(release, want) {
+		t.Errorf("Repositories.GetReleaseByTag returned %+v, want %+v", release, want)
 	}
 }
 
@@ -128,14 +173,16 @@ func TestRepositoriesService_ListReleaseAssets(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/releases/1/assets", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
-	assets, _, err := client.Repositories.ListReleaseAssets("o", "r", 1)
+	opt := &ListOptions{Page: 2}
+	assets, _, err := client.Repositories.ListReleaseAssets("o", "r", 1, opt)
 	if err != nil {
 		t.Errorf("Repositories.ListReleaseAssets returned error: %v", err)
 	}
-	want := []ReleaseAsset{{ID: Int(1)}}
+	want := []*ReleaseAsset{{ID: Int(1)}}
 	if !reflect.DeepEqual(assets, want) {
 		t.Errorf("Repositories.ListReleaseAssets returned %+v, want %+v", assets, want)
 	}
@@ -157,6 +204,78 @@ func TestRepositoriesService_GetReleaseAsset(t *testing.T) {
 	want := &ReleaseAsset{ID: Int(1)}
 	if !reflect.DeepEqual(asset, want) {
 		t.Errorf("Repositories.GetReleaseAsset returned %+v, want %+v", asset, want)
+	}
+}
+
+func TestRepositoriesService_DownloadReleaseAsset_Stream(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", defaultMediaType)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", "attachment; filename=hello-world.txt")
+		fmt.Fprint(w, "Hello World")
+	})
+
+	reader, _, err := client.Repositories.DownloadReleaseAsset("o", "r", 1)
+	if err != nil {
+		t.Errorf("Repositories.DownloadReleaseAsset returned error: %v", err)
+	}
+	want := []byte("Hello World")
+	content, err := ioutil.ReadAll(reader)
+	if err != nil {
+		t.Errorf("Repositories.DownloadReleaseAsset returned bad reader: %v", err)
+	}
+	if !bytes.Equal(want, content) {
+		t.Errorf("Repositories.DownloadReleaseAsset returned %+v, want %+v", content, want)
+	}
+}
+
+func TestRepositoriesService_DownloadReleaseAsset_Redirect(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", defaultMediaType)
+		http.Redirect(w, r, "/yo", http.StatusFound)
+	})
+
+	_, got, err := client.Repositories.DownloadReleaseAsset("o", "r", 1)
+	if err != nil {
+		t.Errorf("Repositories.DownloadReleaseAsset returned error: %v", err)
+	}
+	want := "/yo"
+	if !strings.HasSuffix(got, want) {
+		t.Errorf("Repositories.DownloadReleaseAsset returned %+v, want %+v", got, want)
+	}
+}
+
+func TestRepositoriesService_DownloadReleaseAsset_APIError(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/releases/assets/1", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", defaultMediaType)
+		w.WriteHeader(http.StatusNotFound)
+		fmt.Fprint(w, `{"message":"Not Found","documentation_url":"https://developer.github.com/v3"}`)
+	})
+
+	resp, loc, err := client.Repositories.DownloadReleaseAsset("o", "r", 1)
+	if err == nil {
+		t.Error("Repositories.DownloadReleaseAsset did not return an error")
+	}
+
+	if resp != nil {
+		resp.Close()
+		t.Error("Repositories.DownloadReleaseAsset returned stream, want nil")
+	}
+
+	if loc != "" {
+		t.Errorf(`Repositories.DownloadReleaseAsset returned "%s", want empty ""`, loc)
 	}
 }
 

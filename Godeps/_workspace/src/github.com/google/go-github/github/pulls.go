@@ -14,12 +14,11 @@ import (
 // methods of the GitHub API.
 //
 // GitHub API docs: http://developer.github.com/v3/pulls/
-type PullRequestsService struct {
-	client *Client
-}
+type PullRequestsService service
 
 // PullRequest represents a GitHub pull request on a repository.
 type PullRequest struct {
+	ID           *int       `json:"id,omitempty"`
 	Number       *int       `json:"number,omitempty"`
 	State        *string    `json:"state,omitempty"`
 	Title        *string    `json:"title,omitempty"`
@@ -37,13 +36,30 @@ type PullRequest struct {
 	Additions    *int       `json:"additions,omitempty"`
 	Deletions    *int       `json:"deletions,omitempty"`
 	ChangedFiles *int       `json:"changed_files,omitempty"`
+	URL          *string    `json:"url,omitempty"`
 	HTMLURL      *string    `json:"html_url,omitempty"`
+	IssueURL     *string    `json:"issue_url,omitempty"`
+	StatusesURL  *string    `json:"statuses_url,omitempty"`
+	DiffURL      *string    `json:"diff_url,omitempty"`
+	PatchURL     *string    `json:"patch_url,omitempty"`
+	Assignee     *User      `json:"assignee,omitempty"`
+	Assignees    []*User    `json:"assignees,omitempty"`
 
-	// TODO(willnorris): add head and base once we have a Commit struct defined somewhere
+	Head *PullRequestBranch `json:"head,omitempty"`
+	Base *PullRequestBranch `json:"base,omitempty"`
 }
 
 func (p PullRequest) String() string {
 	return Stringify(p)
+}
+
+// PullRequestBranch represents a base or head branch in a GitHub pull request.
+type PullRequestBranch struct {
+	Label *string     `json:"label,omitempty"`
+	Ref   *string     `json:"ref,omitempty"`
+	SHA   *string     `json:"sha,omitempty"`
+	Repo  *Repository `json:"repo,omitempty"`
+	User  *User       `json:"user,omitempty"`
 }
 
 // PullRequestListOptions specifies the optional parameters to the
@@ -59,12 +75,23 @@ type PullRequestListOptions struct {
 
 	// Base filters pull requests by base branch name.
 	Base string `url:"base,omitempty"`
+
+	// Sort specifies how to sort pull requests. Possible values are: created,
+	// updated, popularity, long-running. Default is "created".
+	Sort string `url:"sort,omitempty"`
+
+	// Direction in which to sort pull requests. Possible values are: asc, desc.
+	// If Sort is "created" or not specified, Default is "desc", otherwise Default
+	// is "asc"
+	Direction string `url:"direction,omitempty"`
+
+	ListOptions
 }
 
 // List the pull requests for the specified repository.
 //
 // GitHub API docs: http://developer.github.com/v3/pulls/#list-pull-requests
-func (s *PullRequestsService) List(owner string, repo string, opt *PullRequestListOptions) ([]PullRequest, *Response, error) {
+func (s *PullRequestsService) List(owner string, repo string, opt *PullRequestListOptions) ([]*PullRequest, *Response, error) {
 	u := fmt.Sprintf("repos/%v/%v/pulls", owner, repo)
 	u, err := addOptions(u, opt)
 	if err != nil {
@@ -76,7 +103,7 @@ func (s *PullRequestsService) List(owner string, repo string, opt *PullRequestLi
 		return nil, nil, err
 	}
 
-	pulls := new([]PullRequest)
+	pulls := new([]*PullRequest)
 	resp, err := s.client.Do(req, pulls)
 	if err != nil {
 		return nil, resp, err
@@ -104,10 +131,19 @@ func (s *PullRequestsService) Get(owner string, repo string, number int) (*PullR
 	return pull, resp, err
 }
 
+// NewPullRequest represents a new pull request to be created.
+type NewPullRequest struct {
+	Title *string `json:"title,omitempty"`
+	Head  *string `json:"head,omitempty"`
+	Base  *string `json:"base,omitempty"`
+	Body  *string `json:"body,omitempty"`
+	Issue *int    `json:"issue,omitempty"`
+}
+
 // Create a new pull request on the specified repository.
 //
 // GitHub API docs: https://developer.github.com/v3/pulls/#create-a-pull-request
-func (s *PullRequestsService) Create(owner string, repo string, pull *PullRequest) (*PullRequest, *Response, error) {
+func (s *PullRequestsService) Create(owner string, repo string, pull *NewPullRequest) (*PullRequest, *Response, error) {
 	u := fmt.Sprintf("repos/%v/%v/pulls", owner, repo)
 	req, err := s.client.NewRequest("POST", u, pull)
 	if err != nil {
@@ -140,4 +176,111 @@ func (s *PullRequestsService) Edit(owner string, repo string, number int, pull *
 	}
 
 	return p, resp, err
+}
+
+// ListCommits lists the commits in a pull request.
+//
+// GitHub API docs: https://developer.github.com/v3/pulls/#list-commits-on-a-pull-request
+func (s *PullRequestsService) ListCommits(owner string, repo string, number int, opt *ListOptions) ([]*RepositoryCommit, *Response, error) {
+	u := fmt.Sprintf("repos/%v/%v/pulls/%d/commits", owner, repo, number)
+	u, err := addOptions(u, opt)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := s.client.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	commits := new([]*RepositoryCommit)
+	resp, err := s.client.Do(req, commits)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return *commits, resp, err
+}
+
+// ListFiles lists the files in a pull request.
+//
+// GitHub API docs: https://developer.github.com/v3/pulls/#list-pull-requests-files
+func (s *PullRequestsService) ListFiles(owner string, repo string, number int, opt *ListOptions) ([]*CommitFile, *Response, error) {
+	u := fmt.Sprintf("repos/%v/%v/pulls/%d/files", owner, repo, number)
+	u, err := addOptions(u, opt)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	req, err := s.client.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	commitFiles := new([]*CommitFile)
+	resp, err := s.client.Do(req, commitFiles)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return *commitFiles, resp, err
+}
+
+// IsMerged checks if a pull request has been merged.
+//
+// GitHub API docs: https://developer.github.com/v3/pulls/#get-if-a-pull-request-has-been-merged
+func (s *PullRequestsService) IsMerged(owner string, repo string, number int) (bool, *Response, error) {
+	u := fmt.Sprintf("repos/%v/%v/pulls/%d/merge", owner, repo, number)
+	req, err := s.client.NewRequest("GET", u, nil)
+	if err != nil {
+		return false, nil, err
+	}
+
+	resp, err := s.client.Do(req, nil)
+	merged, err := parseBoolResponse(err)
+	return merged, resp, err
+}
+
+// PullRequestMergeResult represents the result of merging a pull request.
+type PullRequestMergeResult struct {
+	SHA     *string `json:"sha,omitempty"`
+	Merged  *bool   `json:"merged,omitempty"`
+	Message *string `json:"message,omitempty"`
+}
+
+// PullRequestOptions lets you define how a pull request will be merged.
+type PullRequestOptions struct {
+	Squash bool
+}
+
+type pullRequestMergeRequest struct {
+	CommitMessage *string `json:"commit_message"`
+	Squash        *bool   `json:"squash,omitempty"`
+}
+
+// Merge a pull request (Merge Button™).
+//
+// GitHub API docs: https://developer.github.com/v3/pulls/#merge-a-pull-request-merge-buttontrade
+func (s *PullRequestsService) Merge(owner string, repo string, number int, commitMessage string, options *PullRequestOptions) (*PullRequestMergeResult, *Response, error) {
+	u := fmt.Sprintf("repos/%v/%v/pulls/%d/merge", owner, repo, number)
+
+	pullRequestBody := &pullRequestMergeRequest{CommitMessage: &commitMessage}
+	if options != nil {
+		pullRequestBody.Squash = &options.Squash
+	}
+	req, err := s.client.NewRequest("PUT", u, pullRequestBody)
+
+	// TODO: This header will be unnecessary when the API is no longer in preview.
+	req.Header.Set("Accept", mediaTypeSquashPreview)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	mergeResult := new(PullRequestMergeResult)
+	resp, err := s.client.Do(req, mergeResult)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return mergeResult, resp, err
 }

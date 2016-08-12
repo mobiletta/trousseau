@@ -20,6 +20,7 @@ func TestIssuesService_List_all(t *testing.T) {
 
 	mux.HandleFunc("/issues", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		testFormValues(t, r, values{
 			"filter":    "all",
 			"state":     "closed",
@@ -39,12 +40,11 @@ func TestIssuesService_List_all(t *testing.T) {
 		ListOptions{Page: 1, PerPage: 2},
 	}
 	issues, _, err := client.Issues.List(true, opt)
-
 	if err != nil {
 		t.Errorf("Issues.List returned error: %v", err)
 	}
 
-	want := []Issue{{Number: Int(1)}}
+	want := []*Issue{{Number: Int(1)}}
 	if !reflect.DeepEqual(issues, want) {
 		t.Errorf("Issues.List returned %+v, want %+v", issues, want)
 	}
@@ -56,6 +56,7 @@ func TestIssuesService_List_owned(t *testing.T) {
 
 	mux.HandleFunc("/user/issues", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		fmt.Fprint(w, `[{"number":1}]`)
 	})
 
@@ -64,7 +65,7 @@ func TestIssuesService_List_owned(t *testing.T) {
 		t.Errorf("Issues.List returned error: %v", err)
 	}
 
-	want := []Issue{{Number: Int(1)}}
+	want := []*Issue{{Number: Int(1)}}
 	if !reflect.DeepEqual(issues, want) {
 		t.Errorf("Issues.List returned %+v, want %+v", issues, want)
 	}
@@ -76,6 +77,7 @@ func TestIssuesService_ListByOrg(t *testing.T) {
 
 	mux.HandleFunc("/orgs/o/issues", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		fmt.Fprint(w, `[{"number":1}]`)
 	})
 
@@ -84,7 +86,7 @@ func TestIssuesService_ListByOrg(t *testing.T) {
 		t.Errorf("Issues.ListByOrg returned error: %v", err)
 	}
 
-	want := []Issue{{Number: Int(1)}}
+	want := []*Issue{{Number: Int(1)}}
 	if !reflect.DeepEqual(issues, want) {
 		t.Errorf("Issues.List returned %+v, want %+v", issues, want)
 	}
@@ -101,6 +103,7 @@ func TestIssuesService_ListByRepo(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/issues", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		testFormValues(t, r, values{
 			"milestone": "*",
 			"state":     "closed",
@@ -125,7 +128,7 @@ func TestIssuesService_ListByRepo(t *testing.T) {
 		t.Errorf("Issues.ListByOrg returned error: %v", err)
 	}
 
-	want := []Issue{{Number: Int(1)}}
+	want := []*Issue{{Number: Int(1)}}
 	if !reflect.DeepEqual(issues, want) {
 		t.Errorf("Issues.List returned %+v, want %+v", issues, want)
 	}
@@ -142,6 +145,7 @@ func TestIssuesService_Get(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/issues/1", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testHeader(t, r, "Accept", mediaTypeReactionsPreview)
 		fmt.Fprint(w, `{"number":1, "labels": [{"url": "u", "name": "n", "color": "c"}]}`)
 	})
 
@@ -176,7 +180,7 @@ func TestIssuesService_Create(t *testing.T) {
 		Title:    String("t"),
 		Body:     String("b"),
 		Assignee: String("a"),
-		Labels:   []string{"l1", "l2"},
+		Labels:   &[]string{"l1", "l2"},
 	}
 
 	mux.HandleFunc("/repos/o/r/issues", func(w http.ResponseWriter, r *http.Request) {
@@ -239,4 +243,34 @@ func TestIssuesService_Edit(t *testing.T) {
 func TestIssuesService_Edit_invalidOwner(t *testing.T) {
 	_, _, err := client.Issues.Edit("%", "r", 1, nil)
 	testURLParseError(t, err)
+}
+
+func TestIssuesService_Lock(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/issues/1/lock", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "PUT")
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if _, err := client.Issues.Lock("o", "r", 1); err != nil {
+		t.Errorf("Issues.Lock returned error: %v", err)
+	}
+}
+
+func TestIssuesService_Unlock(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/issues/1/lock", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "DELETE")
+
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	if _, err := client.Issues.Unlock("o", "r", 1); err != nil {
+		t.Errorf("Issues.Unlock returned error: %v", err)
+	}
 }

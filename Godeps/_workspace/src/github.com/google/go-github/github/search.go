@@ -15,9 +15,7 @@ import (
 // in the GitHub API.
 //
 // GitHub API docs: http://developer.github.com/v3/search/
-type SearchService struct {
-	client *Client
-}
+type SearchService service
 
 // SearchOptions specifies optional parameters to the SearchService methods.
 type SearchOptions struct {
@@ -33,6 +31,9 @@ type SearchOptions struct {
 	// Sort order if sort parameter is provided. Possible values are: asc,
 	// desc. Default is desc.
 	Order string `url:"order,omitempty"`
+
+	// Whether to retrieve text match metadata with a query
+	TextMatch bool `url:"-"`
 
 	ListOptions
 }
@@ -82,6 +83,25 @@ func (s *SearchService) Users(query string, opt *SearchOptions) (*UsersSearchRes
 	return result, resp, err
 }
 
+// Match represents a single text match.
+type Match struct {
+	Text    *string `json:"text,omitempty"`
+	Indices []int   `json:"indices,omitempty"`
+}
+
+// TextMatch represents a text match for a SearchResult
+type TextMatch struct {
+	ObjectURL  *string `json:"object_url,omitempty"`
+	ObjectType *string `json:"object_type,omitempty"`
+	Property   *string `json:"property,omitempty"`
+	Fragment   *string `json:"fragment,omitempty"`
+	Matches    []Match `json:"matches,omitempty"`
+}
+
+func (tm TextMatch) String() string {
+	return Stringify(tm)
+}
+
 // CodeSearchResult represents the result of an code search.
 type CodeSearchResult struct {
 	Total       *int         `json:"total_count,omitempty"`
@@ -90,11 +110,12 @@ type CodeSearchResult struct {
 
 // CodeResult represents a single search result.
 type CodeResult struct {
-	Name       *string     `json:"name,omitempty"`
-	Path       *string     `json:"path,omitempty"`
-	SHA        *string     `json:"sha,omitempty"`
-	HTMLURL    *string     `json:"html_url,omitempty"`
-	Repository *Repository `json:"repository,omitempty"`
+	Name        *string     `json:"name,omitempty"`
+	Path        *string     `json:"path,omitempty"`
+	SHA         *string     `json:"sha,omitempty"`
+	HTMLURL     *string     `json:"html_url,omitempty"`
+	Repository  *Repository `json:"repository,omitempty"`
+	TextMatches []TextMatch `json:"text_matches,omitempty"`
 }
 
 func (c CodeResult) String() string {
@@ -123,6 +144,12 @@ func (s *SearchService) search(searchType string, query string, opt *SearchOptio
 	req, err := s.client.NewRequest("GET", u, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if opt != nil && opt.TextMatch {
+		// Accept header defaults to "application/vnd.github.v3+json"
+		// We change it here to fetch back text-match metadata
+		req.Header.Set("Accept", "application/vnd.github.v3.text-match+json")
 	}
 
 	return s.client.Do(req, result)

@@ -10,15 +10,30 @@ import (
 	"time"
 )
 
+// SignatureVerification represents GPG signature verification.
+type SignatureVerification struct {
+	Verified  *bool   `json:"verified,omitempty"`
+	Reason    *string `json:"reason,omitempty"`
+	Signature *string `json:"signature,omitempty"`
+	Payload   *string `json:"payload,omitempty"`
+}
+
 // Commit represents a GitHub commit.
 type Commit struct {
-	SHA       *string       `json:"sha,omitempty"`
-	Author    *CommitAuthor `json:"author,omitempty"`
-	Committer *CommitAuthor `json:"committer,omitempty"`
-	Message   *string       `json:"message,omitempty"`
-	Tree      *Tree         `json:"tree,omitempty"`
-	Parents   []Commit      `json:"parents,omitempty"`
-	Stats     *CommitStats  `json:"stats,omitempty"`
+	SHA          *string                `json:"sha,omitempty"`
+	Author       *CommitAuthor          `json:"author,omitempty"`
+	Committer    *CommitAuthor          `json:"committer,omitempty"`
+	Message      *string                `json:"message,omitempty"`
+	Tree         *Tree                  `json:"tree,omitempty"`
+	Parents      []Commit               `json:"parents,omitempty"`
+	Stats        *CommitStats           `json:"stats,omitempty"`
+	URL          *string                `json:"url,omitempty"`
+	Verification *SignatureVerification `json:"verification,omitempty"`
+
+	// CommentCount is the number of GitHub comments on the commit.  This
+	// is only populated for requests that fetch GitHub data like
+	// Pulls.ListCommits, Repositories.ListCommits, etc.
+	CommentCount *int `json:"comment_count,omitempty"`
 }
 
 func (c Commit) String() string {
@@ -31,6 +46,9 @@ type CommitAuthor struct {
 	Date  *time.Time `json:"date,omitempty"`
 	Name  *string    `json:"name,omitempty"`
 	Email *string    `json:"email,omitempty"`
+
+	// The following fields are only populated by Webhook events.
+	Login *string `json:"username,omitempty"` // Renamed for go-github consistency.
 }
 
 func (c CommitAuthor) String() string {
@@ -47,6 +65,9 @@ func (s *GitService) GetCommit(owner string, repo string, sha string) (*Commit, 
 		return nil, nil, err
 	}
 
+	// TODO: remove custom Accept header when this API fully launches.
+	req.Header.Set("Accept", mediaTypeGitSigningPreview)
+
 	c := new(Commit)
 	resp, err := s.client.Do(req, c)
 	if err != nil {
@@ -54,6 +75,15 @@ func (s *GitService) GetCommit(owner string, repo string, sha string) (*Commit, 
 	}
 
 	return c, resp, err
+}
+
+// createCommit represents the body of a CreateCommit request.
+type createCommit struct {
+	Author    *CommitAuthor `json:"author,omitempty"`
+	Committer *CommitAuthor `json:"committer,omitempty"`
+	Message   *string       `json:"message,omitempty"`
+	Tree      *string       `json:"tree,omitempty"`
+	Parents   []string      `json:"parents,omitempty"`
 }
 
 // CreateCommit creates a new commit in a repository.
@@ -65,7 +95,24 @@ func (s *GitService) GetCommit(owner string, repo string, sha string) (*Commit, 
 // GitHub API docs: http://developer.github.com/v3/git/commits/#create-a-commit
 func (s *GitService) CreateCommit(owner string, repo string, commit *Commit) (*Commit, *Response, error) {
 	u := fmt.Sprintf("repos/%v/%v/git/commits", owner, repo)
-	req, err := s.client.NewRequest("POST", u, commit)
+
+	body := &createCommit{}
+	if commit != nil {
+		parents := make([]string, len(commit.Parents))
+		for i, parent := range commit.Parents {
+			parents[i] = *parent.SHA
+		}
+
+		body = &createCommit{
+			Author:    commit.Author,
+			Committer: commit.Committer,
+			Message:   commit.Message,
+			Tree:      commit.Tree.SHA,
+			Parents:   parents,
+		}
+	}
+
+	req, err := s.client.NewRequest("POST", u, body)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -19,22 +19,24 @@ func TestRepositoriesService_ListKeys(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/keys", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"id":1}]`)
 	})
 
-	keys, _, err := client.Repositories.ListKeys("o", "r")
+	opt := &ListOptions{Page: 2}
+	keys, _, err := client.Repositories.ListKeys("o", "r", opt)
 	if err != nil {
 		t.Errorf("Repositories.ListKeys returned error: %v", err)
 	}
 
-	want := []Key{{ID: Int(1)}}
+	want := []*Key{{ID: Int(1)}}
 	if !reflect.DeepEqual(keys, want) {
 		t.Errorf("Repositories.ListKeys returned %+v, want %+v", keys, want)
 	}
 }
 
 func TestRepositoriesService_ListKeys_invalidOwner(t *testing.T) {
-	_, _, err := client.Repositories.ListKeys("%", "%")
+	_, _, err := client.Repositories.ListKeys("%", "%", nil)
 	testURLParseError(t, err)
 }
 

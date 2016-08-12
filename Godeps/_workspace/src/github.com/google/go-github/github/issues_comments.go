@@ -15,8 +15,12 @@ type IssueComment struct {
 	ID        *int       `json:"id,omitempty"`
 	Body      *string    `json:"body,omitempty"`
 	User      *User      `json:"user,omitempty"`
+	Reactions *Reactions `json:"reactions,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	URL       *string    `json:"url,omitempty"`
+	HTMLURL   *string    `json:"html_url,omitempty"`
+	IssueURL  *string    `json:"issue_url,omitempty"`
 }
 
 func (i IssueComment) String() string {
@@ -34,13 +38,15 @@ type IssueListCommentsOptions struct {
 
 	// Since filters comments by time.
 	Since time.Time `url:"since,omitempty"`
+
+	ListOptions
 }
 
 // ListComments lists all comments on the specified issue.  Specifying an issue
 // number of 0 will return all comments on all issues for the repository.
 //
 // GitHub API docs: http://developer.github.com/v3/issues/comments/#list-comments-on-an-issue
-func (s *IssuesService) ListComments(owner string, repo string, number int, opt *IssueListCommentsOptions) ([]IssueComment, *Response, error) {
+func (s *IssuesService) ListComments(owner string, repo string, number int, opt *IssueListCommentsOptions) ([]*IssueComment, *Response, error) {
 	var u string
 	if number == 0 {
 		u = fmt.Sprintf("repos/%v/%v/issues/comments", owner, repo)
@@ -56,7 +62,11 @@ func (s *IssuesService) ListComments(owner string, repo string, number int, opt 
 	if err != nil {
 		return nil, nil, err
 	}
-	comments := new([]IssueComment)
+
+	// TODO: remove custom Accept header when this API fully launches.
+	req.Header.Set("Accept", mediaTypeReactionsPreview)
+
+	comments := new([]*IssueComment)
 	resp, err := s.client.Do(req, comments)
 	if err != nil {
 		return nil, resp, err
@@ -75,6 +85,10 @@ func (s *IssuesService) GetComment(owner string, repo string, id int) (*IssueCom
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// TODO: remove custom Accept header when this API fully launches.
+	req.Header.Set("Accept", mediaTypeReactionsPreview)
+
 	comment := new(IssueComment)
 	resp, err := s.client.Do(req, comment)
 	if err != nil {

@@ -29,6 +29,7 @@ type WebHookPayload struct {
 	Pusher     *User           `json:"pusher,omitempty"`
 	Ref        *string         `json:"ref,omitempty"`
 	Repo       *Repository     `json:"repository,omitempty"`
+	Sender     *User           `json:"sender,omitempty"`
 }
 
 func (w WebHookPayload) String() string {
@@ -70,6 +71,7 @@ type Hook struct {
 	CreatedAt *time.Time             `json:"created_at,omitempty"`
 	UpdatedAt *time.Time             `json:"updated_at,omitempty"`
 	Name      *string                `json:"name,omitempty"`
+	URL       *string                `json:"url,omitempty"`
 	Events    []string               `json:"events,omitempty"`
 	Active    *bool                  `json:"active,omitempty"`
 	Config    map[string]interface{} `json:"config,omitempty"`
@@ -103,7 +105,7 @@ func (s *RepositoriesService) CreateHook(owner, repo string, hook *Hook) (*Hook,
 // ListHooks lists all Hooks for the specified repository.
 //
 // GitHub API docs: http://developer.github.com/v3/repos/hooks/#list
-func (s *RepositoriesService) ListHooks(owner, repo string, opt *ListOptions) ([]Hook, *Response, error) {
+func (s *RepositoriesService) ListHooks(owner, repo string, opt *ListOptions) ([]*Hook, *Response, error) {
 	u := fmt.Sprintf("repos/%v/%v/hooks", owner, repo)
 	u, err := addOptions(u, opt)
 	if err != nil {
@@ -115,7 +117,7 @@ func (s *RepositoriesService) ListHooks(owner, repo string, opt *ListOptions) ([
 		return nil, nil, err
 	}
 
-	hooks := new([]Hook)
+	hooks := new([]*Hook)
 	resp, err := s.client.Do(req, hooks)
 	if err != nil {
 		return nil, resp, err
@@ -164,6 +166,18 @@ func (s *RepositoriesService) DeleteHook(owner, repo string, id int) (*Response,
 	return s.client.Do(req, nil)
 }
 
+// PingHook triggers a 'ping' event to be sent to the Hook.
+//
+// GitHub API docs: https://developer.github.com/v3/repos/hooks/#ping-a-hook
+func (s *RepositoriesService) PingHook(owner, repo string, id int) (*Response, error) {
+	u := fmt.Sprintf("repos/%v/%v/hooks/%d/pings", owner, repo, id)
+	req, err := s.client.NewRequest("POST", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	return s.client.Do(req, nil)
+}
+
 // TestHook triggers a test Hook by github.
 //
 // GitHub API docs: http://developer.github.com/v3/repos/hooks/#test-a-push-hook
@@ -174,4 +188,9 @@ func (s *RepositoriesService) TestHook(owner, repo string, id int) (*Response, e
 		return nil, err
 	}
 	return s.client.Do(req, nil)
+}
+
+// ListServiceHooks is deprecated.  Use Client.ListServiceHooks instead.
+func (s *RepositoriesService) ListServiceHooks() ([]*ServiceHook, *Response, error) {
+	return s.client.ListServiceHooks()
 }

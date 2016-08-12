@@ -13,12 +13,14 @@ type RepositoryListForksOptions struct {
 	// How to sort the forks list.  Possible values are: newest, oldest,
 	// watchers.  Default is "newest".
 	Sort string `url:"sort,omitempty"`
+
+	ListOptions
 }
 
 // ListForks lists the forks of the specified repository.
 //
 // GitHub API docs: http://developer.github.com/v3/repos/forks/#list-forks
-func (s *RepositoriesService) ListForks(owner, repo string, opt *RepositoryListForksOptions) ([]Repository, *Response, error) {
+func (s *RepositoriesService) ListForks(owner, repo string, opt *RepositoryListForksOptions) ([]*Repository, *Response, error) {
 	u := fmt.Sprintf("repos/%v/%v/forks", owner, repo)
 	u, err := addOptions(u, opt)
 	if err != nil {
@@ -30,7 +32,7 @@ func (s *RepositoriesService) ListForks(owner, repo string, opt *RepositoryListF
 		return nil, nil, err
 	}
 
-	repos := new([]Repository)
+	repos := new([]*Repository)
 	resp, err := s.client.Do(req, repos)
 	if err != nil {
 		return nil, resp, err

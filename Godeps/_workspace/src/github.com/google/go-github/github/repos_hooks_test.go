@@ -64,7 +64,7 @@ func TestRepositoriesService_ListHooks(t *testing.T) {
 		t.Errorf("Repositories.ListHooks returned error: %v", err)
 	}
 
-	want := []Hook{{ID: Int(1)}, {ID: Int(2)}}
+	want := []*Hook{{ID: Int(1)}, {ID: Int(2)}}
 	if !reflect.DeepEqual(hooks, want) {
 		t.Errorf("Repositories.ListHooks returned %+v, want %+v", hooks, want)
 	}
@@ -151,6 +151,20 @@ func TestRepositoriesService_DeleteHook(t *testing.T) {
 func TestRepositoriesService_DeleteHook_invalidOwner(t *testing.T) {
 	_, err := client.Repositories.DeleteHook("%", "%", 1)
 	testURLParseError(t, err)
+}
+
+func TestRepositoriesService_PingHook(t *testing.T) {
+	setup()
+	defer teardown()
+
+	mux.HandleFunc("/repos/o/r/hooks/1/pings", func(w http.ResponseWriter, r *http.Request) {
+		testMethod(t, r, "POST")
+	})
+
+	_, err := client.Repositories.PingHook("o", "r", 1)
+	if err != nil {
+		t.Errorf("Repositories.PingHook returned error: %v", err)
+	}
 }
 
 func TestRepositoriesService_TestHook(t *testing.T) {

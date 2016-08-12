@@ -19,22 +19,24 @@ func TestIssuesService_ListLabels(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/labels", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"name": "a"},{"name": "b"}]`)
 	})
 
-	labels, _, err := client.Issues.ListLabels("o", "r")
+	opt := &ListOptions{Page: 2}
+	labels, _, err := client.Issues.ListLabels("o", "r", opt)
 	if err != nil {
 		t.Errorf("Issues.ListLabels returned error: %v", err)
 	}
 
-	want := []Label{{Name: String("a")}, {Name: String("b")}}
+	want := []*Label{{Name: String("a")}, {Name: String("b")}}
 	if !reflect.DeepEqual(labels, want) {
 		t.Errorf("Issues.ListLabels returned %+v, want %+v", labels, want)
 	}
 }
 
 func TestIssuesService_ListLabels_invalidOwner(t *testing.T) {
-	_, _, err := client.Issues.ListLabels("%", "%")
+	_, _, err := client.Issues.ListLabels("%", "%", nil)
 	testURLParseError(t, err)
 }
 
@@ -156,22 +158,24 @@ func TestIssuesService_ListLabelsByIssue(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/issues/1/labels", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"name": "a"},{"name": "b"}]`)
 	})
 
-	labels, _, err := client.Issues.ListLabelsByIssue("o", "r", 1)
+	opt := &ListOptions{Page: 2}
+	labels, _, err := client.Issues.ListLabelsByIssue("o", "r", 1, opt)
 	if err != nil {
 		t.Errorf("Issues.ListLabelsByIssue returned error: %v", err)
 	}
 
-	want := []Label{{Name: String("a")}, {Name: String("b")}}
+	want := []*Label{{Name: String("a")}, {Name: String("b")}}
 	if !reflect.DeepEqual(labels, want) {
 		t.Errorf("Issues.ListLabelsByIssue returned %+v, want %+v", labels, want)
 	}
 }
 
 func TestIssuesService_ListLabelsByIssue_invalidOwner(t *testing.T) {
-	_, _, err := client.Issues.ListLabelsByIssue("%", "%", 1)
+	_, _, err := client.Issues.ListLabelsByIssue("%", "%", 1, nil)
 	testURLParseError(t, err)
 }
 
@@ -198,7 +202,7 @@ func TestIssuesService_AddLabelsToIssue(t *testing.T) {
 		t.Errorf("Issues.AddLabelsToIssue returned error: %v", err)
 	}
 
-	want := []Label{{URL: String("u")}}
+	want := []*Label{{URL: String("u")}}
 	if !reflect.DeepEqual(labels, want) {
 		t.Errorf("Issues.AddLabelsToIssue returned %+v, want %+v", labels, want)
 	}
@@ -251,7 +255,7 @@ func TestIssuesService_ReplaceLabelsForIssue(t *testing.T) {
 		t.Errorf("Issues.ReplaceLabelsForIssue returned error: %v", err)
 	}
 
-	want := []Label{{URL: String("u")}}
+	want := []*Label{{URL: String("u")}}
 	if !reflect.DeepEqual(labels, want) {
 		t.Errorf("Issues.ReplaceLabelsForIssue returned %+v, want %+v", labels, want)
 	}
@@ -287,21 +291,23 @@ func TestIssuesService_ListLabelsForMilestone(t *testing.T) {
 
 	mux.HandleFunc("/repos/o/r/milestones/1/labels", func(w http.ResponseWriter, r *http.Request) {
 		testMethod(t, r, "GET")
+		testFormValues(t, r, values{"page": "2"})
 		fmt.Fprint(w, `[{"name": "a"},{"name": "b"}]`)
 	})
 
-	labels, _, err := client.Issues.ListLabelsForMilestone("o", "r", 1)
+	opt := &ListOptions{Page: 2}
+	labels, _, err := client.Issues.ListLabelsForMilestone("o", "r", 1, opt)
 	if err != nil {
 		t.Errorf("Issues.ListLabelsForMilestone returned error: %v", err)
 	}
 
-	want := []Label{{Name: String("a")}, {Name: String("b")}}
+	want := []*Label{{Name: String("a")}, {Name: String("b")}}
 	if !reflect.DeepEqual(labels, want) {
 		t.Errorf("Issues.ListLabelsForMilestone returned %+v, want %+v", labels, want)
 	}
 }
 
 func TestIssuesService_ListLabelsForMilestone_invalidOwner(t *testing.T) {
-	_, _, err := client.Issues.ListLabelsForMilestone("%", "%", 1)
+	_, _, err := client.Issues.ListLabelsForMilestone("%", "%", 1, nil)
 	testURLParseError(t, err)
 }
